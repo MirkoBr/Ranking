@@ -1,0 +1,12 @@
+name: TFC-Ranking
+title: TFC-Ranking
+username:
+account: mbrueggemann
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2758236
+bundleId: 3596563
+url: https://mbrueggemann.shinyapps.io/TFC-Ranking/
+when: 1599321103.19524
+asMultiple: FALSE
+asStatic: FALSE
