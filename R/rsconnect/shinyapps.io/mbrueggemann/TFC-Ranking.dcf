@@ -5,8 +5,8 @@ account: mbrueggemann
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2758236
-bundleId: 3596563
+bundleId: 3644702
 url: https://mbrueggemann.shinyapps.io/TFC-Ranking/
-when: 1599321103.19524
+when: 1600454800.26412
 asMultiple: FALSE
 asStatic: FALSE

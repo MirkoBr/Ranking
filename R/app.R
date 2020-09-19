@@ -48,8 +48,7 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       menuItem("Leaderboard", tabName = "leaderboard", icon = icon("dashboard")),
-      menuItem("Details", tabName = "details", icon = icon("microscope")),
-      menuItem("Head-to-Head", tabName = "head", icon = icon("adjust"))
+      menuItem("Details", tabName = "details", icon = icon("microscope"))
     )
   ),
 
@@ -105,15 +104,18 @@ ui <- dashboardPage(
           tabPanel(width = 12,
                    title = "",
                    icon = icon("info"),
-                   h5("Context info"),
+                   h5("Tab infos"),
                    br(),
-                   p("The first 5 positions in the ranking are awarded and extra space.
-                     If you're up here make sure to work hard to stay.
-                     If you're not up here, work hard and hunt them down."),
-                   p("The second tab shows a full list of the current state.
-                     Draws are handled randomly."),
-                   p("The last tab is a searchable table of all pools up the indicated date."),
-                   br(),
+
+                   icon("trophy"),
+                   p("Displays the first 5 positions in the ranking.
+                     If you're up here make sure to work hard to stay here.
+                     If you're not up here, work harder and hunt them down."),
+                   icon("clipboard-list"),
+                   p("Displays the full ranking. Draws are handled randomly."),
+                   icon("table"),
+                   p("Displays a searchable table of all pools up the indicated date."),
+                   icon("calendar"),
                    p("Last pool included: ", textOutput("lastDate"))
 
 
@@ -150,62 +152,53 @@ ui <- dashboardPage(
                ),
                tabPanel(width = 12,
                         title = "",
+                        icon = icon("user"),
+                        box(width = 12,
+                            fluidRow(
+                              column(width = 4,
+                                     selectInput(inputId = "fencer01",
+                                                 label = "Fencer 1",
+                                                 choices = unique(colnames(DATA[-c(1)]))
+                                     )
+                              ),
+                              column(width = 4,
+                                     h1(icon("bolt"), align = "center")
+
+                              ),
+                              column(width = 4,
+                                     selectInput(inputId = "fencer02",
+                                                 label = "Fencer 2",
+                                                 choices = unique(colnames(DATA[-c(1)]))
+                                     )
+                              )
+                            ),
+                            fluidRow(
+                              box(plotOutput("headToHeadDetail"), width = 12)
+                            )
+                        )
+               ),
+               tabPanel(width = 12,
+                        title = "",
                         icon = icon("info"),
-                        h5("Context info"),
+                        h5("Tabs info"),
                         br(),
+                        icon("id-badge"),
                         p("Select one to many fencers to show detailed pool performance."),
-                        p("The first graphs shows the cumlative pool points over time.
+                        icon("chart-line"),
+                        p("Displays the cumulative pool points over time.
                         You can see how fast your points increases with every pool you attend.
                           The more pools you join, the faster you climb."),
-                        p("    In the second graph shows the individual points you gained per pool.
+                        icon("chart-bar"),
+                        p("Displays the number of points you gained per pool.
                         Each dot represents the number of points you scored at the given training.
-                          The closer the points are together to more consitent is your performance.")
+                          The closer the points are together to more consitent is your performance."),
+                        icon("user"),
+                        p("Displays the number of points gained or lost per training betweent two fencers.
+                          You can see if you're consitently outscoring someone, or if you just landed that one luck punch.")
                )
 
 
         )
-      ),
-      #-------------
-      # head tab
-      #--------------
-      tabItem(
-        tabName = "head",
-        h4("Head - to - Head"),
-        br(),
-        p("Choose two fencers and let them battle an epic battle."),
-        tabBox(width = 12,
-               tabPanel(width = 12,
-                       title = "",
-                       icon = icon("user"),
-                       box(width = 12,
-                           fluidRow(
-                             column(width = 4,
-                                    selectInput(inputId = "fencer01",
-                                                label = "Fencer 1",
-                                                choices = unique(colnames(DATA[-c(1)]))
-                                    )
-                             ),
-                             column(width = 4,
-                                    h1(icon("bolt"), align = "center")
-
-                             ),
-                             column(width = 4,
-                                    selectInput(inputId = "fencer02",
-                                                label = "Fencer 2",
-                                                choices = unique(colnames(DATA[-c(1)]))
-                                    )
-                             )
-                           ),
-                           fluidRow(
-                             box(plotOutput("headToHeadDetail"), width = 12)
-                           )
-
-                       )
-
-
-               )
-        )
-
       )
     )
   )
@@ -225,19 +218,20 @@ server <- function(input, output) {
     df = df %>% group_by(variable) %>% mutate(cumsum = cumsum(value))
     p = ggplot(df, aes(x = Date, y = cumsum, color = variable)) +
       geom_line(size = 1) +
-      geom_point(size = 5, alpha = 0.7) +
+      geom_point(size = 4, alpha = 0.7) +
       theme_bw() +
-      scale_color_manual(values = colScaled_Dark2(11)) +
+      scale_color_manual(values = colScaled_Dark2(13)) +
       dark_theme +
-      labs(x = "Date", y = "Points", color = "Name") +
+      labs(x = NULL, y = "Points", color = "Name") +
       theme(legend.position = "top") +
-      ylim(0,max(df$cumsum))
+      ylim(0,max(df$cumsum)) +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
     p
   })
 
   output$table <- DT::renderDataTable({
     d = t(DATA[-c(1)]) %>% as.data.frame()
-    DT::datatable(d)
+    DT::datatable(d, options = list(scrollX = TRUE))
   })
 
   output$tableRes <- renderTable({
@@ -255,15 +249,15 @@ server <- function(input, output) {
 
     ggplot(df, aes(x = variable, y = value, group = variable, color = Date)) +
       geom_boxplot(alpha = 0.3, color = "grey") +
-      geom_beeswarm(size = 5) +
+      geom_beeswarm(size = 4) +
       coord_flip() +
       dark_theme +
       scale_y_continuous(breaks = c(0:max(DATA[-c(1)]))) +
-      theme(axis.text.y = element_text(size=24),
-            axis.text.x = element_text(size=16)) +
+      # theme(axis.text.y = element_text(size=24),
+      #       axis.text.x = element_text(size=16)) +
       xlab(NULL) + ylab("Points") +
       scale_color_brewer(palette = "Set3") +
-      theme(legend.position = "top")
+      theme(legend.position = "none")
   })
 
   output$boxFirst <- renderInfoBox({
@@ -345,13 +339,15 @@ server <- function(input, output) {
   })
 
   output$headToHeadDetail <- renderPlot({
-    # f1 = "Luna"
-    # f2 = "Pia"
     selData = select(DATA, c("Date", input$fencer01, input$fencer02))
-    # selData = select(DATA, c("Date", f1, f2))
-
     overhang = (select(selData, input$fencer01) - select(selData, input$fencer02))
     selData$overhang = overhang[,1]
+
+    # selData = select(DATA, c("Date", "Malina", "Thea"))
+    # overhang = (selData$Luna - selData$Pia)
+    # selData$overhang = overhang
+    # df = selData
+    # df$win = ifelse(df$overhang < 0, "Pia win", "Luna win")
 
     df = selData
     df$win = ifelse(df$overhang < 0,
@@ -364,32 +360,11 @@ server <- function(input, output) {
       scale_fill_brewer(palette = "Set3") +
       theme(legend.position = "top") +
       dark_theme +
-      xlab("Domination score") +
-      ylab(NULL)
-
+      xlab("Point difference") +
+      ylab(NULL) +
+      xlim(-max(DATA[-c(1)]), max(DATA[-c(1)]))
   })
 
 }
 
 shinyApp(ui, server)
-
-
-
-
-# output$performanceAnim <- renderImage({
-#   df = melt(DATA, id.vars = "Date")
-#   df = df %>% group_by(variable) %>% mutate(cumsum = cumsum(value))
-#   p = ggplot(df, aes(x = Date, y = cumsum, color = variable)) +
-#     geom_line(size = 1) +
-#     geom_point(size = 5, alpha = 0.7) +
-#     theme_bw() +
-#     scale_color_manual(values = colScaled_Dark2(10)) +
-#     dark_theme +
-#     labs(x = "Date", y = "Score", color = "Name")
-#   p = p + transition_reveal(Date)
-#   anim_save("perform.gif", animate(p, nframes = 10, device = "png", fps = 1))
-#
-#   list(src = "perform.gif",
-#        contentType = 'image/gif')
-#
-# })
