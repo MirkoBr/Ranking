@@ -24,8 +24,11 @@ library(ggrepel)
 library(dashboardthemes)
 library(stringi)
 library(ggplot2)
-library(gganimate)
+# library(gganimate)
 library(ggbeeswarm)
+library(tidytext)
+library(tidyverse)
+library(readxl)
 source("functions.R")
 
 ### ============================================================================
@@ -34,8 +37,26 @@ source("functions.R")
 ###
 
 DATA = importData("./data/Ranking.xlsx")
+MATCHDATA = parsePoolFromExcel(read_excel("./data/Ranking.xlsx", sheet = "Pools", col_names = FALSE))
+
 # DATA = importData("/Users/mirko/Projects/Private/Ranking/R/data/Ranking.xlsx")
-# x = "/Users/mirko/Projects/Private/Ranking/R/data/Ranking.xlsx"
+# MATCHDATA = parsePoolFromExcel(read_excel("/Users/mirko/Projects/Private/Ranking/R/data/Ranking.xlsx", sheet = "Pools", col_names = FALSE))
+
+# initial formatting of input data
+MATCHDATALONG = lapply(MATCHDATA, function(x){
+  df = clearPool(x)
+  df = melt(df, id.vars = c("Self", "Date", "MaxHit"))
+  df = df[df$value != "-",]
+  return(df)
+})
+MATCHDATALONG = do.call(rbind, MATCHDATALONG)
+MATCHDATALONG$value = as.numeric(MATCHDATALONG$value)
+
+# extract global stats over all recorded pools
+STAT_ALLFENCER = unique(MATCHDATALONG$Self)
+STAT_MAXHITS = unique(MATCHDATALONG$MaxHit)
+STAT_DATES = unique(MATCHDATALONG$Date)
+
 ### ============================================================================
 ### Define shiny ui
 ### ----------------------------------------------------------------------------
@@ -48,7 +69,8 @@ ui <- dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       menuItem("Leaderboard", tabName = "leaderboard", icon = icon("dashboard")),
-      menuItem("Details", tabName = "details", icon = icon("microscope"))
+      menuItem("Details", tabName = "details", icon = icon("microscope")),
+      menuItem("Matches", tabName = "matches", icon = icon("user"))
     )
   ),
 
@@ -127,7 +149,6 @@ ui <- dashboardPage(
       #--------------
       tabItem(
         tabName = "details",
-
         h4("Detailed progress"),
         br(),
         tabBox(width = 12,
@@ -199,10 +220,80 @@ ui <- dashboardPage(
 
 
         )
+      ),
+      #-------------
+      # matches tab
+      #--------------
+      tabItem(
+        tabName = "matches",
+        h4("Individual match results"),
+        br(),
+        tabBox(width = 12,
+               tabPanel(
+                 width = 12,
+                 title = "",
+                 icon = icon("id-badge"),
+                 selectInput(inputId = "fencerDetail",
+                             label = "Selected fencer:",
+                             choices = STAT_ALLFENCER),
+                 selectInput(inputId = "maxHitDetail",
+                             label = "Number of Toches:",
+                             choices = STAT_MAXHITS)
+               ),
+               tabPanel(
+                 width = 12,
+                 title = "",
+                 icon = icon("table"),
+                 box(plotOutput("poolOverview", height = 500), width = 12)
+               ),
+               tabPanel(
+                 width = 12,
+                 title = "",
+                 icon = icon("chart-line"),
+                 tabBox(width = 12,
+                        tabPanel(width = 12,
+                                 title = "",
+                                 icon = icon("search-minus"),
+                                 box(plotOutput("matchTimeFlow", height = 500), width = 12)),
+                        tabPanel(width = 12,
+                                 title = "",
+                                 icon = icon("search-plus"),
+                                 box(plotOutput("poolOverviewAll", height = 500), width = 12))
+                        ),
+               ),
+               tabPanel(
+                 width = 12,
+                 title = "",
+                 icon = icon("chart-bar"),
+                 box(plotOutput("matchPerformance", height = 500), width = 12)
+               ),
+               tabPanel(width = 12,
+                        title = "",
+                        icon = icon("info"),
+                        h5("Tabs info"),
+                        br(),
+                        icon("id-badge"),
+                        p("Select the fencer you want to see the details for and the number of touches fenced per pool."),
+                        icon("table"),
+                        p("Displays a summarized overview pool chart.
+                        Touches are summairzed by the mean for each pool.
+                        The color scale indicates the number touches scored.
+                        The lighter the color the more touches you scored. "),
+                        icon("chart-line"),
+                        p("Displays the number of touches scored and received per pool.
+                        The first plot show a summerized version over all opponents relative to the selected fencer.
+                        The second plot shows the same curve, but seperatly for each opponent."),
+                        icon("chart-bar"),
+                        p("Displays the performance of the selected fencer for each opponent, summarized over all pools.
+                        The bars indicated the mean number of touches scored and received for each opponent.
+                        Circled points indicate the number of touches scored and received of the most recent pool.")
+               )
+        )
       )
     )
   )
 )
+
 
 
 
@@ -363,6 +454,149 @@ server <- function(input, output) {
       xlab("Point difference") +
       ylab(NULL) +
       xlim(-max(DATA[-c(1)]), max(DATA[-c(1)]))
+  })
+
+
+  # Outputs for the match details
+
+  output$matchPerformance <- renderPlot({
+
+    dfTotal = preparePoolSummary(MATCHDATALONG,
+                                 fencer = as.character(input$fencerDetail),
+                                 hits = as.numeric(input$maxHitDetail))
+
+    # dfTotal = preparePoolSummary(MATCHDATALONG, fencer = "Sophia", hits = 10)
+
+    dfAll = data.frame(name = dfTotal$variable,
+                       opponent = dfTotal$Self,
+                       received = dfTotal$received * -1,
+                       scored = dfTotal$scored,
+                       date = dfTotal$Date)
+    dfAll$ord = (abs(dfAll$received) + abs(dfAll$scored))
+
+    # prepare data for plotting - latest pool result
+    dfAllLong = melt(dfAll, id.vars = c("name", "opponent", "date", "ord"))
+    recentDf = dfAllLong[dfAllLong$date == dfAllLong$date[which.max(dfAllLong$date)],]
+
+    # prepare data for plotting - summary pool result
+    df = group_by(dfAll, name, opponent) %>% summarize(received = mean(received), scored = mean(scored))
+    df$ord = (abs(df$received) + abs(df$scored))
+    df = melt(df, id.vars = c("name", "opponent", "ord"))
+
+    ggplot(df, aes(x = reorder(opponent, ord), y = value, fill = variable)) +
+      geom_hline(yintercept = -unique(dfTotal$MaxHit)) +
+      geom_hline(yintercept = unique(dfTotal$MaxHit)) +
+      geom_bar(stat = "identity") +
+      coord_flip() +
+      scale_y_continuous(breaks = seq(-max(abs(min(df$value)),max(df$value)),max(abs(min(df$value)),max(df$value)))) +
+      dark_theme +
+      scale_fill_brewer(palette = "Set3") +
+      scale_x_reordered() +
+      geom_point(data = recentDf, aes(x = opponent, y = value, fill = variable), shape = 21, size = 4, stroke = 2) +
+      xlab(NULL) +
+      ylab("Touches") +
+      ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
+      theme(legend.position = "none")
+
+  })
+
+  output$matchTimeFlow <- renderPlot({
+    dfTotal = preparePoolSummary(MATCHDATALONG,
+                                 fencer = as.character(input$fencerDetail),
+                                 hits = as.numeric(input$maxHitDetail))
+    # dfTotal = preparePoolSummary(MATCHDATALONG, fencer = "Sophia", hits = 10)
+
+    df = data.frame(name = dfTotal$variable,
+                    opponent = dfTotal$Self,
+                    received = dfTotal$received * -1,
+                    scored = dfTotal$scored,
+                    date = dfTotal$Date)
+    df = group_by(df, date) %>% summarise(received = mean(received), scored = mean(scored))
+
+    df$ord = (abs(df$received) + abs(df$scored))
+    df = melt(df, id.vars = c("date", "ord"))
+
+    ggplot(df, aes(x = date, y = value, color = variable)) +
+      geom_hline(yintercept = 0, color = "lightgrey") +
+      geom_hline(yintercept = -unique(dfTotal$MaxHit)) +
+      geom_hline(yintercept = unique(dfTotal$MaxHit)) +
+      geom_point(size = 4) +
+      geom_line(lwd = 1) +
+      scale_y_continuous(breaks = seq((-unique(dfTotal$MaxHit)),(unique(dfTotal$MaxHit))),
+                         limits = c(-unique(dfTotal$MaxHit), unique(dfTotal$MaxHit))) +
+      dark_theme +
+      scale_color_brewer(palette = "Set3") +
+      ylab("Touches") +
+      ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
+      theme(legend.position = "none")
+  })
+
+  output$poolOverview <- renderPlot({
+    m = MATCHDATALONG %>%
+      filter(MaxHit == as.numeric(input$maxHitDetail)) %>%
+      # filter(MaxHit == 5) %>%
+      group_by(Self, variable) %>%
+      summarize(m = mean(value)) %>%
+      spread(Self, m)
+
+    m = as.data.frame(m)
+    rownames(m) = m$variable
+    m$variable = NULL
+
+    m = m[,order(colSums(m, na.rm = T), decreasing = F)]
+    m  = t(m)
+    m = m[,order(colSums(m, na.rm = T), decreasing = F)]
+    idx = match(rownames(m), colnames(m))
+    m = m[,idx]
+
+    m = m[,c(ncol(m):1)]
+
+    df = melt(m)
+    colnames(df) = c("v1", "v2", "Touches")
+
+    ggplot(df, aes(x = v2, y = v1, fill = Touches)) +
+      geom_tile(colour = "grey", lwd = 0.3, alpha = 0.9) +
+      scale_fill_viridis(option = "B") +
+      dark_theme +
+      xlab("") + ylab("") +
+      scale_x_discrete(position = "top") +
+      geom_tile(data = df[df$v1 == as.character(input$fencerDetail),], colour = "black", lwd = 1) +
+      ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
+      theme(legend.position = "top") +
+      theme(axis.text.x=element_text(angle=90, hjust=1))
+  })
+
+  output$poolOverviewAll <- renderPlot({
+    dfTotal = preparePoolSummary(MATCHDATALONG,
+                                 fencer = as.character(input$fencerDetail),
+                                 hits = as.numeric(input$maxHitDetail))
+    # dfTotal = preparePoolSummary(MATCHDATALONG, fencer = "Sophia", hits = 10)
+
+    df = data.frame(name = dfTotal$variable,
+                    opponent = dfTotal$Self,
+                    received = dfTotal$received * -1,
+                    scored = dfTotal$scored,
+                    date = dfTotal$Date)
+
+
+      df = melt(df, id.vars = c("date", "opponent", "name"))
+
+      ggplot(df, aes(x = date, y = value, color = variable)) +
+        geom_hline(yintercept = 0, color = "lightgrey") +
+        geom_hline(yintercept = -unique(dfTotal$MaxHit)) +
+        geom_hline(yintercept = unique(dfTotal$MaxHit)) +
+        geom_point(size = 2) +
+        geom_line(lwd = 0.5) +
+        scale_y_continuous(breaks = seq((-unique(dfTotal$MaxHit)),(unique(dfTotal$MaxHit))),
+                           limits = c(-unique(dfTotal$MaxHit), unique(dfTotal$MaxHit))) +
+        dark_theme +
+        scale_color_brewer(palette = "Set3") +
+        ylab("Touches") +
+        facet_wrap(~opponent) +
+        ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
+        theme(legend.position = "none") +
+        theme(axis.text.x=element_text(angle=90, hjust=1))
+
   })
 
 }
