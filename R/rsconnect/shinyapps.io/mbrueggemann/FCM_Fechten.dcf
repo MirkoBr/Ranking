@@ -1,0 +1,12 @@
+name: FCM_Fechten
+title: FCM_Fechten
+username: mbrueggemann
+account: mbrueggemann
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15865846
+bundleId: 11082409
+url: https://mbrueggemann.shinyapps.io/FCM_Fechten/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

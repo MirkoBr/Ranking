@@ -24,11 +24,11 @@ library(ggrepel)
 library(dashboardthemes)
 library(stringi)
 library(ggplot2)
-# library(gganimate)
 library(ggbeeswarm)
 library(tidytext)
 library(tidyverse)
 library(readxl)
+library(DT)
 source("functions.R")
 
 ### ============================================================================
@@ -36,11 +36,13 @@ source("functions.R")
 ### ----------------------------------------------------------------------------
 ###
 
-DATA = importData("./data/Ranking.xlsx")
+# DATA = importData("./data/Ranking.xlsx")
 MATCHDATA = parsePoolFromExcel(read_excel("./data/Ranking.xlsx", sheet = "Pools", col_names = FALSE))
 
-# DATA = importData("/Users/mirko/Projects/Private/Ranking/R/data/Ranking.xlsx")
-# MATCHDATA = parsePoolFromExcel(read_excel("/Users/mirko/Projects/Private/Ranking/R/data/Ranking.xlsx", sheet = "Pools", col_names = FALSE))
+# Tests - start
+# DATA = importData("R/data/Ranking.xlsx")
+# MATCHDATA = parsePoolFromExcel(read_excel("R/data/Ranking.xlsx", sheet = "Pools", col_names = FALSE))
+# Test - end
 
 # initial formatting of input data
 MATCHDATALONG = lapply(MATCHDATA, function(x){
@@ -64,13 +66,14 @@ STAT_DATES = unique(MATCHDATALONG$Date)
 
 ui <- dashboardPage(
 
-  dashboardHeader(title = "TFC Ranking"),
+  dashboardHeader(title = "Fechtclub Marburg"),
 
   dashboardSidebar(
     sidebarMenu(
-      menuItem("Leaderboard", tabName = "leaderboard", icon = icon("dashboard")),
-      menuItem("Details", tabName = "details", icon = icon("microscope")),
-      menuItem("Matches", tabName = "matches", icon = icon("user"))
+      menuItem("Rangliste", tabName = "leaderboard", icon = icon("dashboard")),
+      menuItem("Punkteverteilung", tabName = "details", icon = icon("user")),
+      menuItem("Gefechtsanalyse", tabName = "matches", icon = icon("microscope")),
+      menuItem(div(tags$img(src = "/fmc_logo_black.jpg", width = "180px")))
     )
   ),
 
@@ -86,7 +89,7 @@ ui <- dashboardPage(
       #--------------
       tabItem(
         tabName = "leaderboard",
-        h4("Current leaderboard"),
+        h4("Rangliste"),
         br(),
         tabBox(
           width = 12,
@@ -126,19 +129,23 @@ ui <- dashboardPage(
           tabPanel(width = 12,
                    title = "",
                    icon = icon("info"),
-                   h5("Tab infos"),
+                   h5("Erklärungen"),
                    br(),
 
                    icon("trophy"),
-                   p("Displays the first 5 positions in the ranking.
-                     If you're up here make sure to work hard to stay here.
-                     If you're not up here, work harder and hunt them down."),
+                   p("Zeigt die ersten 5 Plätze in der Rangliste.
+                    Wenn du hier bist, arbeite weiter viel, um auch oben zu bleiben.
+                    Wenn du noch nicht hier bist, dann gib extra Gas, um die anderen einzuholen."),
                    icon("clipboard-list"),
-                   p("Displays the full ranking. Draws are handled randomly."),
+                   p("Zeigt die komplette Rangliste aller Teilnehmer*innen.
+                     Der Rang bestimmt sich durch die nach den absolvierten Gefechten gewichteten gewonnenen Gefechten.
+                     Beispiel 1: Max gewinnt 5 und verliert 5 Gefechte -> 5/10 Siege * 100% Gefechte gemacht = 5 * 1 = 5 Punkte.
+                     Beispiel 2: Tom gewinnt 5 Gefechte und hat die anderen 5 nicht gefochten -> 5/10 Siege * 50% Gefechte gemacht = 5 * 0.5 = 2.5 Punkte.
+                     Ergebnis: Max und Tom haben beide gleich viel gewonnen, aber weil Max mehr gefochten hat bekommt er mehr Punkte."),
                    icon("table"),
-                   p("Displays a searchable table of all pools up the indicated date."),
+                   p("Hier siehst du eine Tabelle aller Pools mit Datum und den gewichteten Punkten."),
                    icon("calendar"),
-                   p("Last pool included: ", textOutput("lastDate"))
+                   p("Letztes Update: ", textOutput("lastDate"))
 
 
           )
@@ -149,16 +156,16 @@ ui <- dashboardPage(
       #--------------
       tabItem(
         tabName = "details",
-        h4("Detailed progress"),
+        h4("Punkteverteilung"),
         br(),
         tabBox(width = 12,
                tabPanel(width = 12,
                         title = "",
                         icon = icon("id-badge"),
                         checkboxGroupInput(inputId = "fencer",
-                                           choices = unique(colnames(DATA[-c(1)])),
-                                           selected = unique(colnames(DATA[-c(1)])),
-                                           label = "Select fencers" )
+                                           choices = unique(MATCHDATALONG$Self),
+                                           selected = unique(MATCHDATALONG$Self),
+                                           label = "Alle Fechter*innen" )
                ),
                tabPanel(width = 12,
                         title = "",
@@ -178,8 +185,8 @@ ui <- dashboardPage(
                             fluidRow(
                               column(width = 4,
                                      selectInput(inputId = "fencer01",
-                                                 label = "Fencer 1",
-                                                 choices = unique(colnames(DATA[-c(1)]))
+                                                 label = "Fechter*in 1",
+                                                 choices = unique(MATCHDATALONG$Self)
                                      )
                               ),
                               column(width = 4,
@@ -188,8 +195,8 @@ ui <- dashboardPage(
                               ),
                               column(width = 4,
                                      selectInput(inputId = "fencer02",
-                                                 label = "Fencer 2",
-                                                 choices = unique(colnames(DATA[-c(1)]))
+                                                 label = "Fechter*in 2",
+                                                 choices = unique(MATCHDATALONG$Self)
                                      )
                               )
                             ),
@@ -201,21 +208,21 @@ ui <- dashboardPage(
                tabPanel(width = 12,
                         title = "",
                         icon = icon("info"),
-                        h5("Tabs info"),
+                        h5("Erklärungen"),
                         br(),
                         icon("id-badge"),
-                        p("Select one to many fencers to show detailed pool performance."),
+                        p("Hier kannst du einen oder mehrere Fechter*innen auswählen um auf den nächsten Seiten ihre Leistungen in den Pools anzuzeigen."),
                         icon("chart-line"),
-                        p("Displays the cumulative pool points over time.
-                        You can see how fast your points increases with every pool you attend.
-                          The more pools you join, the faster you climb."),
+                        p("Die Grafik zeigt, wie sich deine Punkte über die Zeit summieren.
+                          Du siehst, wie schnell deine Punkte steigen, je mehr Trainingseinheiten du besuchst und je mehr du fichst."),
                         icon("chart-bar"),
-                        p("Displays the number of points you gained per pool.
-                        Each dot represents the number of points you scored at the given training.
-                          The closer the points are together to more consitent is your performance."),
+                        p("Die Grafik zeigt, wie viele Punkte du in jedem Training gesammelt hast.
+                          Jeder Punkt steht für die Punkte, die du in einem einzigen Training bekommen hast.
+                          Je enger die Punkte zusammenliegen, desto konstanter ist deine Leistung.
+                          Die Box zeigt wie sich alle deine Punkte verteilen."),
                         icon("user"),
-                        p("Displays the number of points gained or lost per training betweent two fencers.
-                          You can see if you're consitently outscoring someone, or if you just landed that one luck punch.")
+                        p("Die Grafik zeigt die Punkte, die du in jedem Training gegen einen bestimmten Gegner aufgeholt oder verloren hast.
+                        Du siehst, ob du regelmäßig mehr oder weniger Punkte holst als deine Trainingspartner*innen.")
                )
 
 
@@ -226,7 +233,7 @@ ui <- dashboardPage(
       #--------------
       tabItem(
         tabName = "matches",
-        h4("Individual match results"),
+        h4("Gefechtsanalyse"),
         br(),
         tabBox(width = 12,
                tabPanel(
@@ -234,10 +241,10 @@ ui <- dashboardPage(
                  title = "",
                  icon = icon("id-badge"),
                  selectInput(inputId = "fencerDetail",
-                             label = "Selected fencer:",
+                             label = "Ausgewählte Fechter*in:",
                              choices = STAT_ALLFENCER),
                  selectInput(inputId = "maxHitDetail",
-                             label = "Number of Toches:",
+                             label = "Trefferzahl:",
                              choices = STAT_MAXHITS)
                ),
                tabPanel(
@@ -270,23 +277,22 @@ ui <- dashboardPage(
                tabPanel(width = 12,
                         title = "",
                         icon = icon("info"),
-                        h5("Tabs info"),
+                        h5("Erklärungen"),
                         br(),
                         icon("id-badge"),
-                        p("Select the fencer you want to see the details for and the number of touches fenced per pool."),
+                        p("Hier kannst du einen Fechter auswählen um dir auf den folgenden Seiten die einzelnen Gefechte anzuschauen."),
                         icon("table"),
-                        p("Displays a summarized overview pool chart.
-                        Touches are summairzed by the mean for each pool.
-                        The color scale indicates the number touches scored.
-                        The lighter the color the more touches you scored. "),
+                        p("
+                        Diese Grafik zeigt einen zusammengefassten Pool über alle Trainingseinheiten hinweg.
+                        Je heller eine Feld, desto mehr Punkte hast du gemacht. Der ausgewählte Fechter ist schwarz umrandet. "),
                         icon("chart-line"),
-                        p("Displays the number of touches scored and received per pool.
-                        The first plot show a summerized version over all opponents relative to the selected fencer.
-                        The second plot shows the same curve, but seperatly for each opponent."),
+                        p("
+                        Die Grafik zeigt dir die Anzahl an gesetzten und erhaltenen Treffern pro Trainingseinheit.
+                        Einmal von der gesamten Trainingseinheit(-) und einmal aufgelöst auf den jeweiligen Trainingsparter*in (+)."),
                         icon("chart-bar"),
-                        p("Displays the performance of the selected fencer for each opponent, summarized over all pools.
-                        The bars indicated the mean number of touches scored and received for each opponent.
-                        Circled points indicate the number of touches scored and received of the most recent pool.")
+                        p("Die Grafik zeigt dir die Anzahl an gesetzten und erhaltenen Treffern für jeden Trainingspartner*in.
+                          Der Balken gibt den Durchschnitt über alle Trainingseinheiten an.
+                          Der Punkt zeigt immer das Ergebnis der letzten Trainingseinheit.")
                )
         )
       )
@@ -304,162 +310,365 @@ ui <- dashboardPage(
 server <- function(input, output) {
 
   output$performance <- renderPlot({
-    selData = select(DATA, c("Date", input$fencer))
-    df = melt(selData, id.vars = "Date")
-    df = df %>% group_by(variable) %>% mutate(cumsum = cumsum(value))
-    p = ggplot(df, aes(x = Date, y = cumsum, color = variable)) +
+    # input = NULL
+    # input$fencer = unique(MATCHDATALONG$Self)
+
+    sel_data = MATCHDATALONG %>%
+      filter(Self %in% input$fencer) %>%
+      group_by(Self, Date) %>%
+      summarize(n_matches = n(), n_points = sum(value)) %>%
+      mutate(cum_n_matches = cumsum(n_matches), cum_n_points = cumsum(n_points))
+
+    ggplot(sel_data, aes(x = Date, y = cum_n_matches, color = Self)) +
       geom_line(size = 1) +
       geom_point(size = 4, alpha = 0.7) +
       theme_bw() +
-      scale_color_manual(values = colScaled_Dark2(13)) +
+      scale_color_viridis_d() +
       dark_theme +
-      labs(x = NULL, y = "Points", color = "Name") +
+      labs(x = NULL, y = "Anzahl an Gefechten (kumuliert)", color = NULL) +
       theme(legend.position = "top") +
-      ylim(0,max(df$cumsum)) +
-      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
-    p
+      ylim(0,max(sel_data$cum_n_matches)) +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+      guides(color=guide_legend(nrow=3)) +
+      theme(legend.text=element_text(size=14)) +
+      theme(axis.text=element_text(size=14))
   })
 
   output$table <- DT::renderDataTable({
-    d = t(DATA[-c(1)]) %>% as.data.frame()
-    DT::datatable(d, options = list(scrollX = TRUE))
+    sel_data = MATCHDATALONG
+
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      mutate(match_ratio = n_matches / max_matches) %>%
+      mutate(weighted_wins = round(n_wins * match_ratio, digits = 1)) %>%
+      select(Self, Date, weighted_wins) %>%
+      pivot_wider(names_from = Date, values_from = weighted_wins) %>%
+      rename(Name = Self)
+
+    colors <- c("#ff4d4d", "#ffb366", "#ffff99", "#b3ff99", "#33cc33")
+    num_cols <- names(df)[-1]
+
+    dt <- datatable(
+      df,
+      options = list(pageLength = 25, scrollX = TRUE),
+      rownames = FALSE
+    )
+
+    for (col in num_cols) {
+      vals <- df[[col]]
+
+      if (all(is.na(vals))) {
+        dt <- dt %>%
+          formatStyle(
+            col,
+            backgroundColor = styleEqual(NA, "lightgrey"),
+            color = "black",
+            fontWeight = "bold"
+          )
+        next
+      }
+
+      minv <- min(vals, na.rm = TRUE)
+      maxv <- max(vals, na.rm = TRUE)
+
+      if (identical(minv, maxv)) {
+        delta <- ifelse(minv == 0, 1, abs(minv) * 0.1)
+        cuts <- seq(minv - 2 * delta, minv + 2 * delta, length.out = length(colors) - 1)
+      } else {
+        cuts <- seq(minv, maxv, length.out = length(colors) - 1)
+      }
+
+      dt <- dt %>%
+        formatStyle(
+          col,
+          backgroundColor = styleInterval(cuts, colors),
+          color = "black",
+          fontWeight = "bold"
+        ) %>%
+        formatStyle(
+          col,
+          backgroundColor = styleEqual(NA, "lightgrey"),
+          color = "black",
+          fontWeight = "bold"
+        )
+    }
+
+    dt
+    # DT::datatable(df, options = list(scrollX = TRUE))
   })
 
   output$tableRes <- renderTable({
-    d = t(DATA[-c(1)]) %>% as.data.frame()
-    df = data.frame(Place = paste0(1:nrow(d), "."),
-                    Name = rownames(d)[order(rowSums(d), decreasing = T)],
-                    Points = rowSums(d[order(rowSums(d), decreasing = T),]))
+    sel_data = MATCHDATALONG
+
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      group_by(Self) %>%
+      summarize(total_wins = sum(n_wins), total_points = sum(n_points), total_matches = sum(n_matches), total_max_matches = sum(max_matches)) %>%
+      mutate(match_ratio = total_matches / total_max_matches) %>%
+      mutate(weighted_wins = total_wins * match_ratio) %>%
+      arrange(desc(weighted_wins)) %>%
+      mutate(place = row_number()) %>%
+      select(Platz = place, Name = Self, `Siege (gewichtet)` = weighted_wins, `Treffer (Anzahl)` = total_points )
+      # select(Platz = place, Name = Self, `Siege (gewichtet)` = weighted_wins, `Siege (Anzahl)` = total_wins , `Treffer (Anzahl)` = total_points )
     df
+
   })
 
   output$points <- renderPlot({
-    selData = select(DATA, c("Date", input$fencer))
-    df = melt(selData, id.vars = "Date")
-    df$Date = as.factor(df$Date)
+    sel_data = MATCHDATALONG
 
-    ggplot(df, aes(x = variable, y = value, group = variable, color = Date)) +
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      mutate(match_ratio = n_matches / max_matches) %>%
+      mutate(weighted_wins = round(n_wins * match_ratio, digits = 1)) %>%
+      select(Self, Date, weighted_wins) %>%
+      arrange(desc(weighted_wins))
+
+    ggplot(df, aes(x = Self, y = weighted_wins, color = Date)) +
       geom_boxplot(alpha = 0.3, color = "grey") +
       geom_beeswarm(size = 4) +
       coord_flip() +
       dark_theme +
-      scale_y_continuous(breaks = c(0:max(DATA[-c(1)]))) +
-      # theme(axis.text.y = element_text(size=24),
-      #       axis.text.x = element_text(size=16)) +
-      xlab(NULL) + ylab("Points") +
-      scale_color_brewer(palette = "Set3") +
-      theme(legend.position = "none")
+      scale_y_continuous(breaks = c(0:ceiling(max(df$weighted_wins)))) +
+      labs(
+        title = "Gewichtete Siege pro Training und Sportler",
+        x = "Siege (Gewichtet nach Anzahl Gefechten)",
+        y = NULL
+      ) +
+      scale_color_viridis() +
+      theme(legend.position = "none") +
+      theme(axis.text=element_text(size=14))
+
   })
 
   output$boxFirst <- renderInfoBox({
-    d = DATA[-c(1)]
-    first = which.max(colSums(d))
-    name = as.character(names(first))
-    infoBox(
+    sel_data = MATCHDATALONG
+
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      group_by(Self) %>%
+      summarize(total_wins = sum(n_wins), total_points = sum(n_points), total_matches = sum(n_matches), total_max_matches = sum(max_matches)) %>%
+      mutate(match_ratio = total_matches / total_max_matches) %>%
+      mutate(weighted_wins = total_wins * match_ratio) %>%
+      arrange(desc(weighted_wins)) %>%
+      slice_head(n = 1)
+
+        infoBox(
       title = tags$p("First", style = "font-size: 100%;"),
-      value = tags$p(name, style = "font-size: 150%;"),
+      value = tags$p(df$Self[1], style = "font-size: 150%;"),
       icon = icon("medal"), color = "yellow", fill = TRUE)
   })
 
   output$boxSecond <- renderInfoBox({
-    d = DATA[-c(1)]
-    first = which.max(colSums(d))
-    dd = d[-c(first)]
-    second = which.max(colSums(dd))
-    name = as.character(names(second))
+    sel_data = MATCHDATALONG
+
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      group_by(Self) %>%
+      summarize(total_wins = sum(n_wins), total_points = sum(n_points), total_matches = sum(n_matches), total_max_matches = sum(max_matches)) %>%
+      mutate(match_ratio = total_matches / total_max_matches) %>%
+      mutate(weighted_wins = total_wins * match_ratio) %>%
+      arrange(desc(weighted_wins)) %>%
+      slice_head(n = 2) %>%
+      arrange(weighted_wins)
 
     infoBox(
       title = tags$p("Second", style = "font-size: 100%;"),
-      value = tags$p(name, style = "font-size: 150%;"),
+      value = tags$p(df$Self[1], style = "font-size: 150%;"),
       icon = icon("medal"), color = "yellow", fill = TRUE)
   })
 
   output$boxThird <- renderInfoBox({
-    d = DATA[-c(1)]
-    first = which.max(colSums(d))
-    dd = d[-c(first)]
-    second = which.max(colSums(dd))
-    ddd = dd[-c(second)]
-    thrid = which.max(colSums(ddd))
-    name = as.character(names(thrid))
+    sel_data = MATCHDATALONG
+
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      group_by(Self) %>%
+      summarize(total_wins = sum(n_wins), total_points = sum(n_points), total_matches = sum(n_matches), total_max_matches = sum(max_matches)) %>%
+      mutate(match_ratio = total_matches / total_max_matches) %>%
+      mutate(weighted_wins = total_wins * match_ratio) %>%
+      arrange(desc(weighted_wins)) %>%
+      slice_head(n = 3) %>%
+      arrange(weighted_wins)
 
     infoBox(
       title = tags$p("Third", style = "font-size: 100%;"),
-      value = tags$p(name, style = "font-size: 150%;"),
+      value = tags$p(df$Self[1], style = "font-size: 150%;"),
       icon = icon("medal"), color = "yellow", fill = TRUE)
   })
 
   output$boxFour <- renderInfoBox({
-    d = DATA[-c(1)]
-    first = which.max(colSums(d))
-    dd = d[-c(first)]
-    second = which.max(colSums(dd))
-    ddd = dd[-c(second)]
-    thrid = which.max(colSums(ddd))
-    dddd = ddd[-c(thrid)]
-    four = which.max(colSums(dddd))
-    name = as.character(names(four))
+    sel_data = MATCHDATALONG
+
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      group_by(Self) %>%
+      summarize(total_wins = sum(n_wins), total_points = sum(n_points), total_matches = sum(n_matches), total_max_matches = sum(max_matches)) %>%
+      mutate(match_ratio = total_matches / total_max_matches) %>%
+      mutate(weighted_wins = total_wins * match_ratio) %>%
+      arrange(desc(weighted_wins)) %>%
+      slice_head(n = 4) %>%
+      arrange(weighted_wins)
 
     infoBox(
       title = tags$p("4.", style = "font-size: 100%;"),
-      value = tags$p(name, style = "font-size: 100%;"),
+      value = tags$p(df$Self[1], style = "font-size: 100%;"),
       icon = icon("medal"), color = "navy", fill = TRUE)
   })
 
   output$boxFive <- renderInfoBox({
-    d = DATA[-c(1)]
-    first = which.max(colSums(d))
-    dd = d[-c(first)]
-    second = which.max(colSums(dd))
-    ddd = dd[-c(second)]
-    thrid = which.max(colSums(ddd))
-    dddd = ddd[-c(thrid)]
-    four = which.max(colSums(dddd))
-    ddddd = dddd[-c(four)]
-    five = which.max(colSums(ddddd))
-    name = as.character(names(five))
+    sel_data = MATCHDATALONG
+
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
+
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      group_by(Self) %>%
+      summarize(total_wins = sum(n_wins), total_points = sum(n_points), total_matches = sum(n_matches), total_max_matches = sum(max_matches)) %>%
+      mutate(match_ratio = total_matches / total_max_matches) %>%
+      mutate(weighted_wins = total_wins * match_ratio) %>%
+      arrange(desc(weighted_wins)) %>%
+      slice_head(n = 5) %>%
+      arrange(weighted_wins)
 
     infoBox(
       title = tags$p("5.", style = "font-size: 100%;"),
-      value = tags$p(name, style = "font-size: 100%;"),
+      value = tags$p(df$Self[1], style = "font-size: 100%;"),
       icon = icon("medal"), color = "navy", fill = TRUE)
   })
 
   output$lastDate <- renderText({
-    as.character(max(DATA$Date))
+    sel_data = MATCHDATALONG %>%
+      as_tibble() %>%
+      select(Date) %>%
+      distinct() %>%
+      arrange(desc(Date)) %>%
+      slice_head(n = 1)
+
+    as.character(sel_data$Date)
   })
 
   output$headToHeadDetail <- renderPlot({
-    selData = select(DATA, c("Date", input$fencer01, input$fencer02))
-    overhang = (select(selData, input$fencer01) - select(selData, input$fencer02))
-    selData$overhang = overhang[,1]
+    # input = NULL
+    # input$fencer01 = "Levin"
+    # input$fencer02 = "Alexandra"
+    #
+    # input$fencer02 = "Levin"
+    # input$fencer01 = "Alexandra"
 
-    # selData = select(DATA, c("Date", "Malina", "Thea"))
-    # overhang = (selData$Luna - selData$Pia)
-    # selData$overhang = overhang
-    # df = selData
-    # df$win = ifelse(df$overhang < 0, "Pia win", "Luna win")
+    sel_data = MATCHDATALONG
 
-    df = selData
-    df$win = ifelse(df$overhang < 0,
-                    paste0(as.character(input$fencer02), " win"),
-                    paste0(as.character(input$fencer01), " win"))
-    df$Date = as.factor(df$Date)
+    n_matches = sel_data %>%
+      group_by(Date) %>%
+      summarise(max_matches = n_distinct(Self))
 
-    ggplot(df, aes(x = overhang, y = Date, fill = win)) +
+    df = sel_data %>%
+      as_tibble() %>%
+      mutate(win = ifelse(MaxHit == value, 1, 0)) %>%
+      group_by(Self, Date) %>%
+      summarize(n_wins = sum(win), n_points = sum(value), n_matches = n()) %>%
+      left_join(n_matches, by = "Date") %>%
+      mutate(match_ratio = n_matches  / max_matches) %>%
+      mutate(scaled_wins = n_wins * match_ratio) %>%
+      select(Self, Date, scaled_wins) %>%
+      filter(Self %in% c(input$fencer01, input$fencer02))
+
+      df_plot = df %>%
+      pivot_wider(names_from = Self, values_from = scaled_wins) %>%
+      mutate(diff = .[[2]] - .[[3]]) %>%
+      mutate(win = ifelse(diff > 0, paste0(as.character(input$fencer02), " hat mehr Punkte"),
+                          paste0(as.character(input$fencer01), " hat mehr Punkte"))) %>%
+      mutate(Date = as.factor(Date)) %>%
+      select(Date, matches(input$fencer01), matches(input$fencer02), everything())
+
+
+    ggplot(df_plot, aes(x = diff, y = Date, fill = win)) +
       geom_col() +
       scale_fill_brewer(palette = "Set3") +
       theme(legend.position = "top") +
       dark_theme +
-      xlab("Point difference") +
-      ylab(NULL) +
-      xlim(-max(DATA[-c(1)]), max(DATA[-c(1)]))
+      scale_x_continuous(
+        limits = c(-max(df$scaled_wins), max(df$scaled_wins)),
+        labels = function(x) abs(x)
+      ) +
+      labs(
+        title = "Unterschied in gewichteten Punkten pro Training",
+        x = "Unterschied in gewichteten Punkten",
+        y = NULL,
+        fill = NULL) +
+      theme(axis.text=element_text(size=14))
+
   })
 
 
   # Outputs for the match details
 
   output$matchPerformance <- renderPlot({
+    # input = NULL
+    # input$fencerDetail = "Levin"
+    # input$maxHitDetail = 5
 
     dfTotal = preparePoolSummary(MATCHDATALONG,
                                  fencer = as.character(input$fencerDetail),
@@ -493,18 +702,25 @@ server <- function(input, output) {
       scale_fill_brewer(palette = "Set3") +
       scale_x_reordered() +
       geom_point(data = recentDf, aes(x = opponent, y = value, fill = variable), shape = 21, size = 4, stroke = 2) +
-      xlab(NULL) +
-      ylab("Touches") +
-      ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
-      theme(legend.position = "none")
+      labs(title = "Gesetzte und erhaltene Treffer pro Trainingspartner*in",
+           subtitle = paste0("Fechter*in: ", input$fencerDetail),
+           x = NULL,
+           y = "Treffer",
+           caption = "Balken = Durchschnitt über alle Trainingseinheiten \n Punkt = Ergebnis der letzte Trainingseinheit") +
+      theme(legend.position = "none") +
+      theme(axis.text=element_text(size=14))
+
 
   })
 
   output$matchTimeFlow <- renderPlot({
+    # input = NULL
+    # input$fencerDetail = "Levin"
+    # input$maxHitDetail = 5
+
     dfTotal = preparePoolSummary(MATCHDATALONG,
                                  fencer = as.character(input$fencerDetail),
                                  hits = as.numeric(input$maxHitDetail))
-    # dfTotal = preparePoolSummary(MATCHDATALONG, fencer = "Sophia", hits = 10)
 
     df = data.frame(name = dfTotal$variable,
                     opponent = dfTotal$Self,
@@ -526,12 +742,18 @@ server <- function(input, output) {
                          limits = c(-unique(dfTotal$MaxHit), unique(dfTotal$MaxHit))) +
       dark_theme +
       scale_color_brewer(palette = "Set3") +
-      ylab("Touches") +
-      ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
-      theme(legend.position = "none")
+      labs(title = paste0("Gesetzte und erhaltene Treffer pro Trainingseinheit"),
+           subtitle = paste0("Fechter*in: ", input$fencerDetail),
+           x = NULL, y = "(erhalten) Treffer (gesetzt)") +
+      theme(legend.position = "none") +
+      theme(axis.text=element_text(size=14))
   })
 
   output$poolOverview <- renderPlot({
+    # input = NULL
+    # input$fencerDetail = "Levin"
+    # input$maxHitDetail = 5
+
     m = MATCHDATALONG %>%
       filter(MaxHit == as.numeric(input$maxHitDetail)) %>%
       # filter(MaxHit == 5) %>%
@@ -561,12 +783,21 @@ server <- function(input, output) {
       xlab("") + ylab("") +
       scale_x_discrete(position = "top") +
       geom_tile(data = df[df$v1 == as.character(input$fencerDetail),], colour = "black", lwd = 1) +
-      ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
+      labs(title = paste0("Meta Pool mit durchschnittlichen Treffern"),
+           subtitle = paste0("Fechter*in: ", input$fencerDetail),
+           x = NULL, y = NULL, fill = "Treffer") +
       theme(legend.position = "top") +
-      theme(axis.text.x=element_text(angle=90, hjust=1))
+      theme(axis.text.x=element_text(angle=90, hjust=1)) +
+      theme(axis.text=element_text(size=14)) +
+      # coord_fixed() +
+      guides(fill = guide_colourbar(barwidth = 10, barheight = 0.5))
   })
 
   output$poolOverviewAll <- renderPlot({
+    # input = NULL
+    # input$fencerDetail = "Levin"
+    # input$maxHitDetail = 5
+
     dfTotal = preparePoolSummary(MATCHDATALONG,
                                  fencer = as.character(input$fencerDetail),
                                  hits = as.numeric(input$maxHitDetail))
@@ -591,9 +822,10 @@ server <- function(input, output) {
                            limits = c(-unique(dfTotal$MaxHit), unique(dfTotal$MaxHit))) +
         dark_theme +
         scale_color_brewer(palette = "Set3") +
-        ylab("Touches") +
+        labs(title = paste0("Gesetzte und erhaltene Treffer pro Trainingseinheit"),
+             subtitle = paste0("Fechter*in: ", input$fencerDetail),
+             x = NULL, y = "(erhalten) Treffer (gesetzt)") +
         facet_wrap(~opponent) +
-        ggtitle(paste0(input$fencerDetail, "; ", input$maxHitDetail, " touches")) +
         theme(legend.position = "none") +
         theme(axis.text.x=element_text(angle=90, hjust=1))
 
